@@ -1,0 +1,173 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions to versions module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function versions_install(){
+  $content_type = array(
+    'type'          => 'detalle_version',
+    'name'          => t('Detalle Versiones'),
+    'description'   => t('Use para cargar información sobre los detalles de cada versión'),
+    'title_label'   => t('Title'),
+    'base'          => 'node_content',
+    'custom'        => TRUE,
+  );
+  $node_type = node_type_set_defaults($content_type);
+  node_type_save($node_type);
+
+  field_info_cache_clear();
+  $fields = array(
+    'region' => array(
+      'field_name' => 'field_region_detalle',
+      'type'       => 'taxonomy_term_reference',
+      'settings'   => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => 'detalle_type',
+            'parent'     => 0
+          ),
+        ),
+      ),
+    ),
+  );
+
+  foreach($fields as $field) {
+    if( !field_info_field($field['field_name']) ){
+      field_create_field($field);
+    }//end if
+  }//end foreach
+
+  taxonomy_vocabulary_save((object) array(
+    'name'         => 'Región detalle versión',
+    'machine_name' => 'detalle_type',
+    'description'  => t('Define la región donde aparecerá el contenido en detalle versión'),
+    'module'       => 'versions',
+  ));
+
+  $taxos = array(
+    'detalle_type' => array(
+      'DETALLES' => '',
+      'MOTOR'    => '',
+    ),
+  );
+
+  foreach($taxos as $tax => $terms){
+    $vid = taxonomy_vocabulary_machine_name_load($tax)->vid;
+    $i = 0;
+    foreach($terms as $key => $term) {
+      taxonomy_term_save((object)array(
+        'vid'         => $vid,
+        'name'        => $key,
+        'description' => $term,
+        'weight'      => $i,
+      ));
+      ++$i;
+    }//end foreach
+  }//end foreach
+
+  field_info_cache_clear();
+
+  $instances = array(
+    'Etiqueta' => array(
+      'field_name'  => 'field_introduccion',
+      'label'       => t('Etiqueta'),
+      'description' => t('Etiqueta que se mostrará como título del contenido'),
+      'required'    => TRUE,
+      'widget'      => array(
+        'type' => 'text'
+      ),
+    ),
+    'Vehiculo' => array(
+      'field_name'  => 'field_vehiculo',
+      'label'       => t('Vehículo'),
+      'description' => t('Vehículo al que pertenece el contenido'),
+      'type'        => 'taxonomy_term_reference',
+      'required'    => true,
+      'widget'      => array(
+        'type' => 'options_select'
+      ),
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => 'vehiculo',
+            'parent'     => 0
+          ),
+        ),
+      ),
+    ),
+    'Region' => array(
+      'field_name'  => 'field_region_detalle',
+      'label'       => t('Region'),
+      'description' => t('Region para el contenido (Detalles | Motor)'),
+      'type'        => 'taxonomy_term_reference',
+      'required'    => true,
+      'widget'      => array(
+        'type' => 'options_select'
+      ),
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => 'detalle_type',
+            'parent'     => 0
+          ),
+        ),
+      ),
+    ),
+    'Imagen' => array(
+      'field_name'  => 'field_img_st',
+      'label'       => t('Imagen'),
+      'description' => t('Imagen del contenido'),
+      'required'    => TRUE,
+      'settings'    => array(
+        'file_directory'  => 'field/detalle-versiones',
+        'file_extensions' => 'png gif jpg jpeg',
+        'max_filesize'    => '',
+        'max_resolution'  => '',
+        'min_resolution'  => '',
+        'alt_field'       => FALSE,
+      ),
+    ),
+    'Description' => array(
+      'field_name'  => 'field_description_st',
+      'label'       => t('Descripción'),
+      'description' => t('Descripción del año en la línea del tiempo'),
+      'required'    => TRUE,
+      'widget'      => array(
+        'type' => 'text_textarea_with_summary'
+      ),
+    ),
+  );
+  foreach ($instances as $instance) {
+    $instance['entity_type'] = 'node';
+    $instance['bundle']      = 'detalle_version';
+    field_create_instance($instance);
+  }//end foreach
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function versions_uninstall() {
+  $query  = 'SELECT nid ';
+  $query .= 'FROM {node} ';
+  $query .= 'WHERE {node}.type = :type ';
+  $result = db_query( $query, array(':type' => 'detalle_version') );
+  $nids = array();
+  foreach( $result as $row ) {
+    $nids[] = $row->nid;
+  }//end foreach
+  node_delete_multiple( $nids );
+  foreach( field_info_instances('node', 'detalle_version') as $field_name => $instance ) {
+    field_delete_instance($instance);
+  }//end foreach
+  node_type_delete('detalle_version');
+
+  $voc_id = taxonomy_vocabulary_machine_name_load('detalle_type');
+  taxonomy_vocabulary_delete($voc_id->vid);
+  field_purge_batch(1000);
+}
